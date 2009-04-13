@@ -7,9 +7,11 @@
   \item{data}{Gauge R and R data set, a matrix with columns named 'resp', 'part' and 'operator'}
 }
 \details{From a Gauge R and R data set with columns named resp, part and operator, 'intsignif' displays the 
-P value of the 'part operator' interaction. The function creates the interaction factor. It dsplays two P values. 
-One is the P value of the interaction factor in an ANOVA table. And the other is the likelihood ratio done by doing 
-two lmer models, one nested in the other.}
+P value of the 'part operator' interaction. The function creates the interaction factor. 
+
+It dsplays two P values. 
+One is the P value of the interaction factor in an ANOVA analysis. And the other is the likelihood ratio done by doing 
+two lmer models (linear mixed effects), one nested in the other.}
 \value{A vector of the two P values}
 \references{Package is based on Michael Hamada and Sam Weerandi (July 2000) Measurement System Assessment 
 Via Generalized Inference, Journal of Quality Technology 32, 241-253

@@ -7,7 +7,7 @@ function(sat1,GI1) {  #*****************ratiograph******************************
 #
 #
 plot(sat1[15,],c(1,1,1),type="b",xlim=c(0,1),
-ylim=c(0,6),xlab="(graph truncated at 1.0)",ylab="         Gauge/Total            Repeat/Gauge           Repro/Gauge",
+ylim=c(0,6),xlab="(graph truncated at 1.0)",ylab="         Gauge/Total             Gauge/Parts           Repeat/Gauge",
 main="Ratio Confidence limits",yaxt="n")
 #
 lines(GI1[15,c(1,2,4)],c(2,2,2),col=1)
@@ -23,5 +23,5 @@ points(GI1[i+15,c(1,2,4)],c(2*i+2,2*i+2,2*i+2),col=i+1)
 Axis(x =NULL, at = c(1,2,3,4,5,6),side=2, labels = c("ANOVA","GI","ANOVA","GI","ANOVA","GI"))
 #
 #
-}   # end of ratiograph  ***********************************************************************
+}   # end of ratiograph  ****************************************************************************************
 

@@ -1,11 +1,11 @@
 `MLGI` <-
-function(data,prob,N) { #***********************MLGI*************************************************************************
+function(data,prob,N) { #***********************MLGI********************************************************
 #
 #
 #          use data and prob to do all lmer (max likelihood) estimates and Generalized Inference Confidence limits
 #            inputs are 'data', 'prob' level and 'N' the number of simulations
 #            'data' needs columns named 'part', 'operator', and 'resp' (for response)
-#            Analysis CROSSED, did not do nested
+#
 #            output will be the matrix out.gi.i
 #            example: result<-MLGI(data,0.95,10000)
 #
@@ -18,20 +18,23 @@ suppressPackageStartupMessages(require(arm))    # for sigma.hat, need to have ca
 #
 #
 #
-#--------------- Create interaction variable ----------------------
+#--Create an interaction variable---------------------------------------------------------------
+#  place the part number in the 1000s place and the operator number in the ones place
 #
-partOp<-data$part*100+data$operator          # part in 100s place, operator in 1s place
+partOp<-data$part*1000+data$operator          # part in 1000s place, operator in 1s place
 data<-cbind(data,partOp)                     # add to data
 #data                                        # look at data (commented out)
 #
-#--------------- make factor variables ----------------------------
+#
+#--Make the variables into factor variables-------------------------------------------------------
 #
 resp<-data$resp
 part<-as.factor(data$part)
 operator<-as.factor(data$operator)
 partop<-as.factor(data$partOp)
 #
-#--------------- get levels ---------------------------------------
+#
+#--Extract p,o,n and calculate m; the number of levels for each factor. --------------------------
 #
 p<-nlevels(part)                            # levels for part
 o<-nlevels(operator)                        # levels for operator
@@ -39,44 +42,41 @@ n<-nrow(data)                                # total number of data points
 m<-n/nlevels(partop)                        # repeats, m = total / unique points
 #
 #
-#--------------- check if balanced design -------------------------
-#  if the design is unbalanced m will not be an integer
-#  p*o*m = n   but p*o*round(n) = n only if n is an integer (and the design is balanced)
+#--check if balanced design ----------------------------------------------------------------------
+#  use the fact that p*o*m = n only if parts and operators are balanced and the 
+#  fact that m is only an integer if the repeats are balanced. So p*o*round(m) = n only 
+#  if m is an integer and the entire design is balanced. 
 #
-if (p*o*round(m) != n) { print('NOT a Balanced Design')}
+if (p*o*round(m) != n) { return(print('NOT a Balanced Design'))}
 #
 #
-#-------------- conf int level ------------------------------------
+#--Get the alpha level from the desired probability level ----------------------------------------
+#  which was passed in with the function call
 #
 alpha<- 1-prob
 #
 #
-#------------------------------Test for significance of interaction -----------------------
 #
-#   do two lmer models, one with interaction and one without interaction (nested models)
+#--Test for significance of the interaction term---------------------------------------------------
+#  fit two lmer (linear mixed effects) models, one with and one without the 
+#  interaction term. Do ANOVA on the nested models and extract Pr[2], which is the 
+#  likelihood ratio for significance of the full model (with interaction) over the 
+#  reduced model. If P < 0.25 go on here and do the analysis with an interaction term 
+#  in the model, if not significant, skip ahead to do the no interaction analysis.
+#
 #
 lmer.i<-lmer(resp~1+(1|part) + (1|operator) + (1|partOp),data)     # with interaction
 lmer.ni<-lmer(resp~1+(1|part) + (1|operator),data)                 # without interaction
 #
-#   do anova on the nested models and extract Pr[2], which is the
-#   likelihood ratio for significance of the interaction model over the reduced model
 #
 Pint.lmer<-anova(lmer.i,lmer.ni)$Pr[2]
 #
-#
-#
-#---------------------------------------------------------------------------------------------------
-#                             if significant go on here and do with interaction                     |
-#                             if not significant skip ahead to do no interaction                    |
-#                             a level of 0.25 is used as being significant                          |
-#---------------------------------------------------------------------------------------------------
 #                                                                                                  
 if(Pint.lmer<=0.25) {           # if significant go on, if not skip this
 #
 #
 #
-#
-# --------------define matrix for storing results----------------------------------------
+#--Define a matrix for storing the final results---------------------------------------------------
 #
 #
 out.gi.i<-matrix(NA,17,4)
@@ -84,26 +84,30 @@ out.gi.i<-matrix(NA,17,4)
 rownames(out.gi.i)<-c("SD:Part","SD:Operator","SD:PartOp","SD:Repeat","SD:Reproduce","SD:Gauge","SD:Total",
    "Var:Part","Var:Operator","Var:PartOp","Var:Repeat","Var:Reproduce","Var:Gauge","Var:Total",
    "Gauge/Tot","Gauge/Parts","Repeat/Gauge")
-colnames(out.gi.i)<-c("ML","Lower GI","Mid GI","Upper GI")
+colnames(out.gi.i)<-c("REML","Lower GI","Mid GI","Upper GI")
 #
 #
 #
-#------------------lmer with interaction------------------------------------------------
+#--Fit a linear mixed effects model--------------------------------------------------------------
+#  (with interaction) using lmer, from the lme4 package
 #
 lmer.i<-lmer(resp~1+(1|part) + (1|operator) + (1|partOp),data)
 #
-#------------------take estimates using VarCorr and sigma.hat --------------------------
+#
+#--Take the estimates of variance----------------------------------------------------------------
+#  using VarCorr (from package lme4) and sigma.hat (from package arm.)
 #
 out.gi.i[8,1]<-VarCorr(lmer.i)$part[1]            # lmer part var
 out.gi.i[9,1]<-VarCorr(lmer.i)$operator[1]        # lmer operator var
 out.gi.i[10,1]<-VarCorr(lmer.i)$partOp[1]         # lmer PartOp var
 #                                                   lmer error will come from sigma.hat below
 #
-out.gi.i[4,1]<-sigma.hat(lmer.i)$sigma$data       # lmer error stdev - needs 'arm', which needs car installed
+out.gi.i[4,1]<-sigma.hat(lmer.i)$sigma$data       # lmer error stdev - needs ARM (CAR)
 #
 out.gi.i[11,1]<-out.gi.i[4,1]^2                   # lmer error var from the stdev
 #
-#-----------------calc other estimates --------------------------------
+#
+#--Calculate variance components for reproducibility, gauge and total, Calculate the ratios-------
 #
 out.gi.i[12,1]<-out.gi.i[9,1]+out.gi.i[10,1]       # lmer repro = Op + PartOp
 out.gi.i[13,1]<-out.gi.i[12,1]+out.gi.i[11,1]      # lmer Gauge = repro + error
@@ -114,12 +118,14 @@ out.gi.i[16,1]<-out.gi.i[13,1]/out.gi.i[8,1]       # lmer gauge / part
 out.gi.i[17,1]<-out.gi.i[11,1]/out.gi.i[13,1]      # lmer repeat / gauge
 #
 #
-#-------------------------------------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
 #                     Generalized Inference w/interaction
-#-------------------------------------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
 #
 #
-#---------------need SS and df from ANOVA ----------------------------------
+#--Run ANOVA--------------------------------------------------------------------------------------
+#  sums of squares and degrees of freedom from ANOVA are required for generalized inference,
+#  extract these values
 #
 lm.anova.i<-anova(lm(resp~part*operator))       # anova of linear regression w/interaction
 #
@@ -134,19 +140,24 @@ ssi.po<-lm.anova.i$Sum[3]
 ssi.e<-lm.anova.i$Sum[4]
 #
 #
-#--------------------define matrices for storing simulated values------------
+#--Define the N by 10, T, matrix for storing the simulated T(Y;s,c) values---------------------------
+#  of equation 10. Each of the N rows will be an iteration result from the 
+#  chi-square random variables, Y. Each column is a specific variance component 
+#  calculated from the Y, the c vector (with elements as in equation 9) and the 
+#  observed sums of squares
 #
 Ti<-matrix(0,N,10)
 colnames(Ti)<-c("Part","Op","PartOp","Rep","Repro","Gauge","Total",
                 "gauge/total","gauge/part","repeat/gauge")
 #
 #
-#---------------------------------------------------------------------------
-#           calculate simulated distribution Ti (with interaction)
-#---------------------------------------------------------------------------
+#-----------------------------------------------------------------------------------------------------
+# calculate simulated distribution T (with interaction) as in Eq 10
+#-----------------------------------------------------------------------------------------------------
 #
-# set Ci coefficients so the 1st seven columnx of Ti will be:
-#
+#  Set the c vectors. The c0 specify if the part variance is included, 
+#  the c1 is for operator, c2 is for part*Op and c3 is error.
+#  So for the T:
 # 1st column will be "part"
 # 2nd column will be "operator"
 # 3rd column will be "partOp"  interaction
@@ -170,7 +181,7 @@ for(j in 1:7) {                            # one loop for each column of C
       Y2<-rchisq(1,dfi.po)
       Y3<-rchisq(1,dfi.e)
       #
-      #       calculate the random variable for the estimate (Eq 6 in paper)
+      #       calculate the T as in eq 10
       Ti[i,j]<-
         (Ci0[j]*ssi.p)/(m*o*Y0) + 
         (Ci1[j]*ssi.o)/(m*p*Y1) + 
@@ -180,21 +191,24 @@ for(j in 1:7) {                            # one loop for each column of C
    }
 }
 #
-#------------------ ratios ------------------------------------------------
+#-ratios -----------------------------------------------------------------------------------------------
+# Set the a and b vectors for the ratio estimates. These are defined the same as the c vector. 
+# Three ratios are calculated: gauge/total, gauge/part and repeat/gauge. Other ratios can easily 
+# be done by adjusting the a and b vectors (the labels should also be changed.) 
 #
-# TOP of ratio
+# Numerator of ratio
 # 1st top column will be "gauge"
 # 2nd top column will be "gauge"
 # 3rd top column will be "repeat"
 # (other ratios can be chosen by adjusting a's and b's)
-# (a specific element of a0 to a3 forms an "a" vector as in the paper)
+#
 #
 ai0<-c(0,0,0)
 ai1<-c(1,1,0)
 ai2<-c(1,1,0)
 ai3<-c(1,1,1)
 #
-# BOTTOM of ratio
+# Denominator of ratio
 # 1st bottom column will be "total"
 # 2nd bottom column will be "Part or process"
 # 3rd bottom column will be "gauge"
@@ -207,48 +221,49 @@ bi3<-c(1,0,1)
 for(j in 1:3) {                            # loop for the 3 different ratios
    for(i in 1:N) {                            # loop for the N simulated values
       #
-      Y0t<-rchisq(1,dfi.p)                       # random vars for top of ratio
-      Y1t<-rchisq(1,dfi.o)
-      Y2t<-rchisq(1,dfi.po)
-      Y3t<-rchisq(1,dfi.e)
+      Y0<-rchisq(1,dfi.p)                       # random vars
+      Y1<-rchisq(1,dfi.o)
+      Y2<-rchisq(1,dfi.po)
+      Y3<-rchisq(1,dfi.e)
       #
-      Y0b<-rchisq(1,dfi.p)                       # random vars for bottom of ratio
-      Y1b<-rchisq(1,dfi.o)
-      Y2b<-rchisq(1,dfi.po)
-      Y3b<-rchisq(1,dfi.e)
-      #
-      #       calculate the random variable for the estimate (Eq 7 in paper) 
+      #       calculate the R (Eq 11) 
       numerator<-
-        (ai0[j]*ssi.p)/(m*o*Y0t) + 
-        (ai1[j]*ssi.o)/(m*p*Y1t) + 
-        (1/m)*(ai2[j]-ai0[j]/o-ai1[j]/p)*(ssi.po/Y2t) + 
-        (ai3[j]-ai2[j]/m)*(ssi.e/Y3t)
+        (ai0[j]*ssi.p)/(m*o*Y0) + 
+        (ai1[j]*ssi.o)/(m*p*Y1) + 
+        (1/m)*(ai2[j]-ai0[j]/o-ai1[j]/p)*(ssi.po/Y2) + 
+        (ai3[j]-ai2[j]/m)*(ssi.e/Y3)
       #
       denominator<-
-        (bi0[j]*ssi.p)/(m*o*Y0b) + 
-        (bi1[j]*ssi.o)/(m*p*Y1b) + 
-        (1/m)*(bi2[j]-bi0[j]/o-bi1[j]/p)*(ssi.po/Y2b) + 
-        (bi3[j]-bi2[j]/m)*(ssi.e/Y3b)
+        (bi0[j]*ssi.p)/(m*o*Y0) + 
+        (bi1[j]*ssi.o)/(m*p*Y1) + 
+        (1/m)*(bi2[j]-bi0[j]/o-bi1[j]/p)*(ssi.po/Y2) + 
+        (bi3[j]-bi2[j]/m)*(ssi.e/Y3)
       #
       Ti[i,j+7]<-numerator/denominator       # calculate the ratio simulation, store in columns of Ti after 1st 7
    }
 }
 #
-#-------------------sort the values --------------------------------------------------------------------
+#--Sort the simulated values one column of the T matrix at a time---------------------------------------
 #
 for(j in 1:10) { Ti[,j]<-sort(Ti[,j]) }                # sort column by column
 #
 #
-#---------------find the first positive value and save that index - ip[j]-------------------------------
+#--Find the first positive simulated value for each column of the T matrix,------------------------------
+#  and save that index. The negative values will be ignored
 #
-ip<-c(1,1,1,1,1,1,1,1,1,1)                              # ip will be the vector of indices of 1st positive value
+ip<-c(1,1,1,1,1,1,1,1,1,1)                          # ip will be the vector of indices of 1st positive value
 for (j in 1:10) {
-    while( Ti[ ip[j] ,j] < 0 ) { ip[j]<-ip[j]+1 }       # increase index as long as the value is negative
+    while( Ti[ ip[j] ,j] < 0 ) { ip[j]<-ip[j]+1 }   # increase index as long as the value is negative
 }
 #
 #
-#-------------------pick out the confidence limits (and midpoint) ----------------------------------------
-#    (alpha/2) quantile to (1-alpha/2) quantile of all positive random estimates
+#--Pick out the confidence limits (and midpoint.)---------------------------------------------------------
+#  The limits are from the a/2 quantile to the (1-a/2) quantile of all positive simulations 
+#  (where a = 1  confidence level). A variance confidence limit is picked out from a column 
+#  of the T matrix and then placed into the correct row of the output matrix. The output matrix 
+#  has 4 columns. The lower, mid and upper confidence limits are placed into the 2nd, 3rd and 4th 
+#  columns
+# 
 #
 #  Ti columns are
 #      1="Part", 2="Op", 3="PartOp", 4="Rep", 5="Repro", 6="Gauge", 7="Total", 8="gauge/total", 9="gauge/Part", 10="Repeat/Gauge"
@@ -266,12 +281,12 @@ for(j in 1:10) {
    out.gi.i[j+7,4]<-Ti[ (ip[j]-1) + round( (1-alpha/2)*(N-(ip[j]-1)) ),j]            # Upper Conf int in 4th col
 }
 #
-# -----------------calc the StDev's --------------------------------------------
+#--Calculate the standard deviation's and place them into the first 7 rows of the output matrix---------------
 #
 for(i in 1:7) { for(j in 1:4) { out.gi.i[i,j]<- suppressWarnings( sqrt(out.gi.i[i+7,j]) )  }}
 #
 #
-#------------------------------------------------------------
+#-------------------------------------------------------------------------------------------------------------
 #        histogram of results - commented out
 #
 #  index  1=Part, 2=Oper, 3=PartOp, 4=repeat, 5=Repro, 6=gauge, 7=Total, 8=gauge/Tot, 9=Rep/gauge, 10=Repro/gauge
@@ -279,21 +294,21 @@ for(i in 1:7) { for(j in 1:4) { out.gi.i[i,j]<- suppressWarnings( sqrt(out.gi.i[
 #i<-1
 #hist(Ti[,i],breaks=100,xlim=c(Ti[round((alpha/2)*N),i],Ti[round((1-alpha/2)*N),i]))
 #
-#-------------------------------------------------------------
+#-------------------------------------------------------------------------------------------------------------
 #
 #print(out.gi.i, digits = 3, quote = FALSE, na.print = "-", print.gap = 3, right = TRUE)
 #
 #
 #
-#-----------------------------------------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------------------
 }            # end "if" of with Interaction
-#-----------------------------------------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------------------
 #
 #
 #
 #
 #
-#                     now for when the interaction term is NOT significant
+#   Calculations for when the interaction term is NOT significant
 #-----------------------------------------------------------------------------------------------------------------
 #
 #
@@ -301,19 +316,19 @@ if(Pint.lmer>0.25) {                    # interaction is not significant
 #
 #
 #
-# --------------define matrix for storing output results------------------------
+# --------------define matrix for storing output results----------------------------------------------------------
 #
 out.gi.ni<-matrix(NA,17,4)
 rownames(out.gi.ni)<-c("SD:Part","SD:Operator","SD:PartOp","SD:Repeat","SD:Reproduce","SD:Gauge","SD:Total",
    "Var:Part","Var:Operator","Var:PartOp","Var:Repeat","Var:Reproduce","Var:Gauge","Var:Total",
    "Gauge/Total","Gauge/Part","Repeat/Gauge")
-colnames(out.gi.ni)<-c("ML","Lower GI","Mid GI","Upper GI")
+colnames(out.gi.ni)<-c("REML","Lower GI","Mid GI","Upper GI")
 #
-#------------------lmer without interaction---------------------------------
+#------------------lmer without interaction----------------------------------------------------------------------
 #
 lmer.ni<-lmer(resp~1+(1|part) + (1|operator),data)
 #
-#------------------take estimates--------------------------------------
+#------------------take estimates--------------------------------------------------------------------------------
 #
 out.gi.ni[8,1]<-VarCorr(lmer.ni)$part[1]            # lmer part var
 out.gi.ni[9,1]<-VarCorr(lmer.ni)$operator[1]        # lmer operator var
@@ -323,7 +338,7 @@ out.gi.ni[4,1]<-sigma.hat(lmer.ni)$sigma$data       # lmer error sd - needs requ
 #
 out.gi.ni[11,1]<-out.gi.ni[4,1]^2                   # lmer error var
 #
-#-----------------calc other estimates --------------------------------
+#-----------------calc other estimates -------------------------------------------------------------------------
 #
 out.gi.ni[12,1]<-out.gi.ni[9,1]                       # lmer repro = Oper
 out.gi.ni[13,1]<-out.gi.ni[12,1]+out.gi.ni[11,1]      # lmer gauge = repro + error
@@ -335,12 +350,12 @@ out.gi.ni[17,1]<-out.gi.ni[11,1]/out.gi.ni[13,1]      # lmer repeat / gauge
 #
 #
 #
-#----------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------------------
 #                     Generalized Inference w/NO interaction
-#----------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------------------
 #
 #
-#---------------need SS and df from anova for GI---------------------------
+#---------------need SS and df from anova for GI---------------------------------------
 #
 lm.anova.ni<-anova(lm(resp~part+operator))     # anova of linear regression w/no int
 #
@@ -353,11 +368,9 @@ ss.o<-lm.anova.ni$Sum[2]
 ss.e<-lm.anova.ni$Sum[3]
 #
 #
-#N<-1000            # number of simulations for GI or get from function call
-#
-#-------------------------------------------------------------------------------
-#       calculate Tni (with NO interaction) simulated distribution 
-#-------------------------------------------------------------------------------
+#------------------------------------------------------------------------------------
+#       calculate T (with NO interaction) simulated distribution 
+#------------------------------------------------------------------------------------
 #
 #
 #         define matrices for storing simulated values
@@ -368,7 +381,7 @@ colnames(Tni)<-c("Part","Op","Rep","gauge","Total",
                  "gauge/total","gauge/part","repeat/gauge")
 #
 #
-#----------set C coefficients so Ti will be matrix with columns:-----------------
+#----------set C coefficients so T will be matrix with columns:---------------------
 #
 # 1st column will be "part"
 # 2nd column will be "operator" same as reproducibility (no interaction)
@@ -388,9 +401,11 @@ for(j in 1:5) {                            # one loop for each estimate
    Y1<-rchisq(1,df.o)
    Y3<-rchisq(1,df.e)
    #
-   #   This equation similar to Eq 6 of paper but derived for No interaction
+   #   Equation 13
    #
-   Tni[i,j]<-(C0[j]*ss.p)/(m*o*Y0) + (C1[j]*ss.o)/(m*p*Y1) + (C3[j]-C0[j]/(o*m)-C1[j]/(p*m))*(ss.e/Y3)
+   Tni[i,j]<-(C0[j]*ss.p)/(m*o*Y0) + 
+             (C1[j]*ss.o)/(m*p*Y1) + 
+             (C3[j]-C0[j]/(o*m)-C1[j]/(p*m))*(ss.e/Y3)
    #
    }
 }
@@ -416,27 +431,27 @@ b3<-c(1,0,1)
 for(j in 1:3) {                           # for each of the three ratios
    for(i in 1:N) {                           # N simulations
    #
-   Y0t<-rchisq(1,df.p)                       # random vars for top of ratio
-   Y1t<-rchisq(1,df.o)
-   Y3t<-rchisq(1,df.e)
+   Y0<-rchisq(1,df.p)                       # random vars
+   Y1<-rchisq(1,df.o)
+   Y3<-rchisq(1,df.e)
    #
-   Y0b<-rchisq(1,df.p)                       # random vars for bottom of ratio
-   Y1b<-rchisq(1,df.o)
-   Y3b<-rchisq(1,df.e)
-   #
-   numerator<-(a0[j]*ss.p)/(m*o*Y0t) + (a1[j]*ss.o)/(m*p*Y1t) + (a3[j]-a0[j]/(o*m)-a1[j]/(p*m))*(ss.e/Y3t)
-   denominator<-(b0[j]*ss.p)/(m*o*Y0b) + (b1[j]*ss.o)/(m*p*Y1b) + (b3[j]-b0[j]/(o*m)-b1[j]/(p*m))*(ss.e/Y3b)
+   numerator<-(a0[j]*ss.p)/(m*o*Y0) + 
+              (a1[j]*ss.o)/(m*p*Y1) + 
+              (a3[j]-a0[j]/(o*m)-a1[j]/(p*m))*(ss.e/Y3)
+   denominator<-(b0[j]*ss.p)/(m*o*Y0) + 
+                (b1[j]*ss.o)/(m*p*Y1) + 
+                (b3[j]-b0[j]/(o*m)-b1[j]/(p*m))*(ss.e/Y3)
    #
    Tni[i,j+5]<-numerator/denominator
    }
 }
 #
-#-------------------sort the values ----------------------------------------
+#-------------------sort the values -------------------------------------------------------------
 #
 for(j in 1:8) { Tni[,j]=sort(Tni[,j]) }                # sort col by col
 #
 #
-#---------------find the first positive value and save that index - ip[j]---------
+#---------------find the first positive value and save that index - ip[j]------------------------
 #
 ip<-c(1,1,1,1,1,1,1,1)
 #
@@ -445,7 +460,7 @@ for (j in 1:8) {
 }
 #
 #
-#-------------------pick out the confidence limits (and midpoint) ------------
+#-------------------pick out the confidence limits (and midpoint) --------------------------------
 #
 # j index for Tni 1=Part, 2=Oper,             3=repeat,            4=gauge,  5=Total,  6=gauge/Tot,  7=Gauge/Part,   8=Repeat/Gauge
 # k index for out 8=Part, 9=Oper, 10=PartOp, 11=repeat, 12=Repro, 13=gauge, 14=Total, 15=Gauge/Tot, 16=Gauge/Part,  17=Repeat/Gauge
@@ -463,12 +478,12 @@ for(j in 1:8) {
 out.gi.ni[12,]<-out.gi.ni[9,]                        # repro is same as oper
 #
 #
-# -----------------calc the StDev's -------------------------------------------------------------
+# -----------------calc the StDev's ----------------------------------------------------------------
 #
 for(i in 1:7) { for(j in 1:4) { out.gi.ni[i,j]<-suppressWarnings( sqrt(out.gi.ni[i+7,j]) ) }}
 #
 #
-#-----------------------------Print results------------------------------------------------------
+#-----------------------------Print results---------------------------------------------------------
 #
 #print(out.gi.ni, digits = 3, quote = FALSE, na.print = "-", print.gap = 3, right = TRUE)
 #
@@ -484,5 +499,5 @@ out.gi.i<-out.gi.ni    # use one print function at end so it outputs
 print(out.gi.i, digits = 3, quote = FALSE, na.print = "-", print.gap = 3, right = TRUE)
 #
 #
-}  # end of function MLGI     ***********************************************************
+}  # end of function MLGI     ***************************************************************************************
 

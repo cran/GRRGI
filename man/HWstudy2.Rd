@@ -9,11 +9,14 @@
   \describe{
     \item{\code{part}}{a numeric vector of part numbers}
     \item{\code{operator}}{a numeric vector of operator numbers}
-    \item{\code{resp}}{a numeric vector of responses}
+    \item{\code{resp}}{a numeric vector of response data}
   }
 }
-\details{Gauge R and R data, a matrix of 3 columns and 40 rows. As required for the functions anovasat and MLGI, the columns are named: resp, part and operator. There are 10 parts, 2 operators and each has two repeats.}
-\source{Michael Hamada and Sam Weerandi (July 2000) Measurement System Assessment Via Generalized Inference, Journal of Quality Technology 32, 241-253}
+\details{Gauge R and R data, a matrix of 3 columns and 40 rows. As required for the functions 
+anovasat and MLGI, the columns are named: resp, part and operator. There are 10 parts, 2 
+operators and each has two repeats.}
+\source{Michael Hamada and Sam Weerandi (July 2000) Measurement System Assessment Via 
+Generalized Inference, Journal of Quality Technology 32, 241-253}
 \examples{
 data(HWstudy2)
 anovasat(HWstudy2,0.95)

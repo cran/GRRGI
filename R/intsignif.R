@@ -10,26 +10,32 @@ function(data) {  #***********************intsignif*****************************
 require(nlme,warn.conflicts = FALSE)           # for lmer groupeddata, need package installed
 require(lme4,warn.conflicts = FALSE)           #
 #
-#--------------- Create interaction variable ----------------------
+#--Create an interaction variable---------------------------------------------------------------
+#  place the part number in the 1000s place and the operator number in the ones place
 #
-partOp<-data$part*100+data$operator            # part in 100s place, operator in 1s place
+partOp<-data$part*1000+data$operator           # part in 1000s place, operator in 1s place
 data<-cbind(data,partOp)                       # add to data
 #
-#--------------- make factor variables ----------------------------
+#--Make the variables into factor variables-------------------------------------------------------
+#
 resp<-data$resp
 part<-as.factor(data$part)
 operator<-as.factor(data$operator)
 partop<-as.factor(data$partOp)
 #
 #
-#-------------------------------do the ANOVA---------------------
+#--Run ANOVA and extract the P value for the interaction factor-----------------------------------
 #
 lm.anova.i<-anova(lm(resp~part*operator))     # anova of linear regression w/interaction
 #
 Pint.lm<-lm.anova.i$Pr[3]
 #
 #
-#------------------------------do the lmer-----------------------
+#--Test for significance of the interaction term---------------------------------------------------
+#  fit two lmer (linear mixed effects) models, one with and one without the 
+#  interaction term. Do ANOVA on the nested models and extract Pr[2], which is the 
+#  likelihood ratio for significance of the full model (with interaction) over the 
+#  reduced model.
 #
 lmer.i<-lmer(resp~1+(1|part) + (1|operator) + (1|partOp),data)
 #
@@ -47,5 +53,5 @@ colnames(result)<-(" ")
 result[1,1]<-Pint.lm
 result[2,1]<-Pint.lmer
 result
-} # end of  intsignif   ----------------------------------------------------
+} # end of  intsignif   ------------------------------------------------------------------------------------------
 
